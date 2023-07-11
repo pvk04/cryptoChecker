@@ -13,11 +13,13 @@
                 name="wallet"
                 id="wallet"
                 v-model="ticker"
+                @input="setValidate()"
                 class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
                 placeholder="Например DOGE"
               />
             </div>
             <div
+              v-if="ticker"
               class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
             >
               <span
@@ -41,7 +43,9 @@
                 CHD
               </span>
             </div>
-            <div class="text-sm text-red-600">Такой тикер уже добавлен</div>
+            <div v-if="!isValid" class="text-sm text-red-600">
+              Такой тикер уже добавлен
+            </div>
           </div>
         </div>
         <button
@@ -155,30 +159,54 @@ export default {
   data() {
     return {
       ticker: "",
+      isValid: true,
       tickers: [],
       selectedTicker: -1,
       graph: [],
     };
   },
+  created() {
+    const coinsData = localStorage.getItem("cryproList");
+    if (coinsData) {
+      this.tickers = JSON.parse(coinsData);
+      this.tickers.forEach((tick, id) => {
+        this.subscribeToUpdate(id, tick.name);
+      });
+    }
+  },
   methods: {
-    add() {
-      const newTicker = { name: this.ticker, price: "-" };
-      const newLength = this.tickers.push(newTicker);
-
+    subscribeToUpdate(id, tickerName) {
       setInterval(async () => {
         const f = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${newTicker.name}&tsyms=USD&api_key=10b9a5f7e292759dd154058bb3f4f6ae549dce9af0e7bf9e09af74eb565ce3dd`
+          `https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD&api_key=10b9a5f7e292759dd154058bb3f4f6ae549dce9af0e7bf9e09af74eb565ce3dd`
         );
         const data = await f.json();
 
-        this.tickers[newLength - 1].price =
+        this.tickers[id].price =
           data.USD > 0 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
 
-        if (this.selectedTicker === newLength - 1) {
+        if (this.selectedTicker === id) {
           this.graph.push(data.USD);
         }
       }, 3000);
+    },
+
+    add() {
+      this.isValid = !this.tickers.some(
+        ({ name }) => name === this.ticker.toUpperCase()
+      );
+
+      if (!this.isValid) return;
+
+      const newTicker = { name: this.ticker.toUpperCase(), price: "-" };
+      const newLength = this.tickers.push(newTicker);
+      localStorage.setItem("cryproList", JSON.stringify(this.tickers));
+      this.subscribeToUpdate(newLength - 1, newTicker.name);
       this.ticker = "";
+    },
+
+    setValidate() {
+      this.isValid = true;
     },
 
     select(id) {
@@ -190,6 +218,7 @@ export default {
     handleDelete(id) {
       this.selectedTicker === id && (this.selectedTicker = -1);
       this.tickers.splice(id, 1);
+      localStorage.setItem("cryproList", JSON.stringify(this.tickers));
     },
 
     normalizeGraph() {
@@ -202,5 +231,3 @@ export default {
   },
 };
 </script>
-
-<style src="./app.css"></style>
