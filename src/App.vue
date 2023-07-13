@@ -23,24 +23,11 @@
               class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
             >
               <span
+                v-for="coin in allCoinsList"
+                :key="allCoinsList[coin].id"
                 class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
               >
-                BTC
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                DOGE
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                BCH
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                CHD
+                {{ allCoinsList[coin].symbol }}
               </span>
             </div>
             <div v-if="!isValid" class="text-sm text-red-600">
@@ -71,10 +58,28 @@
       </section>
       <template v-if="tickers.length">
         <hr class="w-full border-t border-gray-600 my-4" />
-
+        <div>
+          <button
+            v-if="page > 1"
+            @click="page -= 1"
+            class="my-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+          >
+            Назад
+          </button>
+          <p>{{ page }}</p>
+          <button
+            v-if="hasNextPage"
+            @click="page += 1"
+            class="my-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+          >
+            Вперед
+          </button>
+          <div class="mx-2">Фильтр: <input v-model="filter" /></div>
+        </div>
+        <hr class="w-full border-t border-gray-600 my-4" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
-            v-for="(t, id) in tickers"
+            v-for="(t, id) in filteredTickers()"
             :key="id"
             @click="select(id)"
             :class="{ 'border-4': selectedTicker === id }"
@@ -158,14 +163,35 @@ export default {
   name: "App",
   data() {
     return {
+      allCoinsList: {},
+
       ticker: "",
       isValid: true,
+      filter: "",
+
       tickers: [],
       selectedTicker: -1,
       graph: [],
+
+      page: 1,
+      elementsOnPage: 6,
+      hasNextPage: true,
     };
   },
+
   created() {
+    const windowData = Object.fromEntries(
+      new URL(window.location).searchParams.entries()
+    );
+
+    if (windowData.filter) {
+      this.filter = windowData.filter;
+    }
+
+    if (windowData.page) {
+      this.page = windowData.page;
+    }
+
     const coinsData = localStorage.getItem("cryproList");
     if (coinsData) {
       this.tickers = JSON.parse(coinsData);
@@ -173,8 +199,35 @@ export default {
         this.subscribeToUpdate(id, tick.name);
       });
     }
+
+    this.getAllTokens();
   },
+
   methods: {
+    filteredTickers() {
+      const start = (this.page - 1) * this.elementsOnPage;
+      const end = this.page * this.elementsOnPage;
+
+      const filtered = this.tickers.filter((ticker) =>
+        ticker.name.includes(this.filter)
+      );
+      this.hasNextPage = filtered.length > end;
+
+      return filtered.slice(start, end);
+    },
+
+    getAllTokens() {
+      async () => {
+        const allCoinsListData = await fetch(
+          "https://min-api.cryptocompare.com/data/blockchain/list&api_key=10b9a5f7e292759dd154058bb3f4f6ae549dce9af0e7bf9e09af74eb565ce3dd"
+        );
+
+        const allCoinsList = await allCoinsListData.json();
+        this.allCoinsList = allCoinsList;
+        console.log(allCoinsListData);
+      };
+    },
+
     subscribeToUpdate(id, tickerName) {
       setInterval(async () => {
         const f = await fetch(
@@ -198,7 +251,8 @@ export default {
 
       if (!this.isValid) return;
 
-      const newTicker = { name: this.ticker.toUpperCase(), price: "-" };
+      this.filter = "";
+      const newTicker = { name: this.ticker, price: "-" };
       const newLength = this.tickers.push(newTicker);
       localStorage.setItem("cryproList", JSON.stringify(this.tickers));
       this.subscribeToUpdate(newLength - 1, newTicker.name);
@@ -206,6 +260,7 @@ export default {
     },
 
     setValidate() {
+      this.ticker = this.ticker.toUpperCase();
       this.isValid = true;
     },
 
@@ -226,6 +281,26 @@ export default {
       const minValue = Math.min(...this.graph);
       return this.graph.map(
         (price) => 5 + ((price - minValue) * 95) / (maxValue - minValue)
+      );
+    },
+  },
+
+  watch: {
+    filter() {
+      this.page = 1;
+
+      window.history.pushState(
+        null,
+        document.title,
+        `${window.location.pathname}?filter=${this.filter}&page=${this.page}`
+      );
+    },
+
+    page() {
+      window.history.pushState(
+        null,
+        document.title,
+        `${window.location.pathname}?filter=${this.filter}&page=${this.page}`
       );
     },
   },
