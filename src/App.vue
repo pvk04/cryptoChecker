@@ -255,8 +255,10 @@ export default {
     },
 
     filteredCoinList() {
-      const filtered = this.allCoinsList.filter((coin) =>
-        coin.includes(this.ticker)
+      const filtered = this.allCoinsList.filter(
+        (coin) =>
+          coin.includes(this.ticker) &&
+          !this.filteredTickers.some((x) => x.name === coin)
       );
 
       return filtered.splice(0, 4);
