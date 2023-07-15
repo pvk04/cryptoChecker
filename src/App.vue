@@ -92,8 +92,8 @@
           <div
             v-for="(ticker, id) in paginatedTickers"
             :key="id"
-            @click="select(id)"
-            :class="{ 'border-4': selectedTicker === id }"
+            @click="select(ticker)"
+            :class="{ 'border-4': selectedTicker === ticker }"
             class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
           >
             <div class="px-4 py-5 sm:p-6 text-center">
@@ -106,7 +106,7 @@
             </div>
             <div class="w-full border-t border-gray-200"></div>
             <button
-              @click.stop="handleDelete(id)"
+              @click.stop="handleDelete(ticker)"
               class="flex items-center justify-center font-medium w-full bg-gray-100 px-4 py-4 sm:px-6 text-md text-gray-500 hover:text-gray-600 hover:bg-gray-200 hover:opacity-20 transition-all focus:outline-none"
             >
               <svg
@@ -128,7 +128,7 @@
         <hr class="w-full border-t border-gray-600 my-4" />
         <section v-if="selectedTicker != null" class="relative">
           <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
-            {{ tickers[selectedTicker].name }} - USD
+            {{ selectedTicker.name }} - USD
           </h3>
           <div class="flex items-end border-gray-600 border-b border-l h-64">
             <div
@@ -170,7 +170,11 @@
 </template>
 
 <script>
-import { loadTickers, loadAvalibeCoinList } from "./services/api.js";
+import {
+  subscribeToTicker,
+  loadAvalibeCoinList,
+  unsubscribeToTicker,
+} from "./services/api.js";
 
 export default {
   name: "App",
@@ -206,9 +210,12 @@ export default {
     const coinsData = localStorage.getItem("cryproList");
     if (coinsData) {
       this.tickers = JSON.parse(coinsData);
+      this.tickers.forEach((ticker) => {
+        subscribeToTicker(ticker.name, (newPrice) =>
+          this.updateTicker(ticker.name, newPrice)
+        );
+      });
     }
-
-    setInterval(this.updateTickers, 5000);
 
     this.allCoinsList = await loadAvalibeCoinList();
   },
@@ -266,24 +273,20 @@ export default {
   },
 
   methods: {
+    updateTicker(tickerName, price) {
+      this.tickers
+        .filter((ticker) => ticker.name === tickerName)
+        .forEach((ticker) => {
+          if (ticker === this.selectedTicker) {
+            this.graph.push(price);
+          }
+          ticker.price = price;
+        });
+    },
+
     formatPrice(price) {
       if (price === "-") return price;
       return price > 1 ? price.toFixed(2) : price.toPrecision(3);
-    },
-
-    async updateTickers() {
-      if (!this.tickers.length) {
-        return;
-      }
-
-      const tickersData = await loadTickers(
-        this.tickers.map((ticker) => ticker.name)
-      );
-      this.tickers.forEach((ticker) => {
-        const price = tickersData[ticker.name].USD;
-
-        ticker.price = price ? price : "-";
-      });
     },
 
     add() {
@@ -295,20 +298,29 @@ export default {
         if (!this.isValid) return;
       }
 
+      if (!this.allCoinsList.includes(this.ticker))
+        return alert(
+          "К сожалению, в данный момент нет информации по этому тикеру"
+        );
+
       this.filter = "";
       const newTicker = { name: this.ticker, price: "-" };
       this.tickers = [...this.tickers, newTicker];
       this.ticker = "";
+      subscribeToTicker(newTicker.name, (newPrice) => {
+        this.updateTicker(newTicker.name, newPrice);
+      });
     },
 
-    select(id) {
-      if (this.selectedTicker === id) return;
-      this.selectedTicker = id;
+    select(ticker) {
+      if (this.selectedTicker === ticker) return;
+      this.selectedTicker = ticker;
     },
 
-    handleDelete(id) {
-      this.selectedTicker === id && (this.selectedTicker = null);
-      this.tickers = this.tickers.filter((ticker, tickerId) => tickerId != id);
+    handleDelete(tickerToDelete) {
+      this.selectedTicker === tickerToDelete && (this.selectedTicker = null);
+      this.tickers = this.tickers.filter((ticker) => ticker != tickerToDelete);
+      unsubscribeToTicker(tickerToDelete);
     },
   },
 
