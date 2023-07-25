@@ -130,14 +130,18 @@
           <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
             {{ selectedTicker.name }} - USD
           </h3>
-          <div class="flex items-end border-gray-600 border-b border-l h-64">
+          <div
+            class="flex items-end border-gray-600 border-b border-l h-64"
+            ref="graph"
+          >
             <div
               v-for="(bar, id) in normalizedGraph"
               :key="id"
               :style="{
                 height: `${bar}%`,
+                width: `${graphElementWidth}px`,
               }"
-              class="bg-purple-800 border w-10"
+              class="bg-purple-800 border"
             ></div>
           </div>
           <button type="button" class="absolute top-0 right-0">
@@ -189,6 +193,8 @@ export default {
       tickers: [],
       selectedTicker: null,
       graph: [],
+      maxGraphElements: 1,
+      graphElementWidth: 40,
 
       page: 1,
       elementsOnPage: 6,
@@ -218,6 +224,14 @@ export default {
     }
 
     this.allCoinsList = await loadAvalibeCoinList();
+  },
+
+  mounted() {
+    window.addEventListener("resize", this.calculateMaxGraphWidth);
+  },
+
+  unmounted() {
+    window.removeEventListener("resize", this.calculateMaxGraphWidth);
   },
 
   computed: {
@@ -273,12 +287,21 @@ export default {
   },
 
   methods: {
+    calculateMaxGraphWidth() {
+      if (!this.$refs.graph) return;
+      this.maxGraphElements =
+        this.$refs.graph.clientWidth / this.graphElementWidth;
+    },
+
     updateTicker(tickerName, price) {
       this.tickers
         .filter((ticker) => ticker.name === tickerName)
         .forEach((ticker) => {
           if (ticker === this.selectedTicker) {
             this.graph.push(price);
+            while (this.graph.length > this.maxGraphElements) {
+              this.graph.shift();
+            }
           }
           ticker.price = price;
         });
@@ -355,6 +378,8 @@ export default {
 
     selectedTicker() {
       this.graph = [];
+
+      this.$nextTick().then(this.calculateMaxGraphWidth);
     },
   },
 };
